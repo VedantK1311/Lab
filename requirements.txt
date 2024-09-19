@@ -3,3 +3,4 @@ chromadb
 openai
 pysqlite3-binary
 PyMuPDF
+protobuf
