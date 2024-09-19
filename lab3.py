@@ -8,21 +8,20 @@ openai.api_key = "YOUR_OPENAI_API_KEY"
 def get_bot_response(user_input, context):
     # Join the context (last 5 prompts) into a single string for better conversation flow
     context_str = "\n".join(context)
+    prompt = f"{context_str}\nYou: {user_input}\nBot:"
 
-    # Call OpenAI's chat-based API (using the newer syntax)
-    response = openai.completions.create(
-        model="gpt-4",  # Adjust model based on your use case
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": context_str},
-            {"role": "user", "content": user_input}
-        ],
+    # Call OpenAI's completion API (using the newer syntax with prompt)
+    response = openai.Completion.create(
+        model="gpt-4",  # Adjust this to "gpt-3.5-turbo" or "davinci" based on availability
+        prompt=prompt,
         max_tokens=150,
         temperature=0.7,
+        n=1,
+        stop=["You:", "Bot:"]
     )
 
     # Extract and return the bot's response
-    bot_reply = response['choices'][0]['message']['content'].strip()
+    bot_reply = response.choices[0].text.strip()
     return bot_reply
 
 # Streamlit app
