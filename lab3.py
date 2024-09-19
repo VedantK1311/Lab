@@ -1,55 +1,161 @@
-import openai
 import streamlit as st
 
-# Set your OpenAI API key
-openai.api_key = "YOUR_OPENAI_API_KEY"
+from openai import OpenAI
 
-# Function to get response from OpenAI GPT model (using new API)
-def get_bot_response(user_input, context):
-    # Join the context (last 5 prompts) into a single string for better conversation flow
-    context_str = "\n".join(context)
-    prompt = f"{context_str}\nYou: {user_input}\nBot:"
+ 
 
-    # Call OpenAI's completion API (using the newer syntax with prompt)
-    response = openai.Completion.create(
-        model="gpt-4",  # Adjust this to "gpt-3.5-turbo" or "davinci" based on availability
-        prompt=prompt,
-        max_tokens=150,
-        temperature=0.7,
-        n=1,
-        stop=["You:", "Bot:"]
-    )
+st.title("My Lab3 Question Answering Chatbot")
 
-    # Extract and return the bot's response
-    bot_reply = response.choices[0].text.strip()
-    return bot_reply
+ 
 
-# Streamlit app
-def main():
-    st.title("Chatbot with OpenAI GPT (Last 5 Prompts Context)")
+# Sidebar for model selection and buffer size
 
-    if "chat_history" not in st.session_state:
-        st.session_state["chat_history"] = []
-    if "context_buffer" not in st.session_state:
-        st.session_state["context_buffer"] = []
+openAI_model = st.sidebar.selectbox("Which Model?", ("mini", "regular"))
 
-    user_input = st.text_input("You:", key="user_input")
+buffer_size = st.sidebar.slider("Buffer Size", min_value=1, max_value=10, value=2, step=1)
 
-    if user_input:
-        st.session_state["chat_history"].append(f"You: {user_input}")
+# Select the model to use based on the selection
 
-        if len(st.session_state["context_buffer"]) >= 5:
-            st.session_state["context_buffer"].pop(0)
-        st.session_state["context_buffer"].append(f"You: {user_input}")
+if openAI_model == "mini":
 
-        bot_response = get_bot_response(user_input, st.session_state["context_buffer"])
-        st.session_state["chat_history"].append(f"Bot: {bot_response}")
+    model_to_use = "gpt-4o-mini"
 
-        st.session_state["context_buffer"].append(f"Bot: {bot_response}")
-        st.session_state["user_input"] = ""
+else:
 
-    for chat in st.session_state["chat_history"]:
-        st.write(chat)
+    model_to_use = "gpt-4o"
 
-if __name__ == "__main__":
-    main()
+ 
+
+# Initialize the OpenAI client
+
+if 'client' not in st.session_state:
+
+    api_key = st.secrets["OpenAI_key"]
+
+    st.session_state.client = OpenAI(api_key=api_key)
+
+ 
+
+# Initialize the conversation buffer and state
+
+if "messages" not in st.session_state:
+
+    st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
+
+if "awaiting_more_info" not in st.session_state:
+
+    st.session_state["awaiting_more_info"] = False
+
+ 
+
+# Display chat messages
+
+for msg in st.session_state.messages:
+
+    chat_msg = st.chat_message(msg["role"])
+
+    chat_msg.write(msg["content"])
+
+ 
+
+# Handle user input
+
+if prompt := st.chat_input("Type your question here..."):
+
+    if st.session_state.awaiting_more_info:
+
+        if prompt.lower() == "yes":
+
+            st.session_state.messages.append({"role": "user", "content": "Please provide more information."})
+
+            # Generate the additional response from the model
+
+            client = st.session_state.client
+
+            stream = client.chat.completions.create(
+
+                model=model_to_use,
+
+                messages=st.session_state.messages,
+
+                stream=True
+
+            )
+
+            additional_info = st.write_stream(stream)
+
+            st.session_state.messages.append({"role": "assistant", "content": additional_info})
+
+            st.session_state.messages.append({"role": "assistant", "content": "DO YOU WANT MORE INFO?"})
+
+        elif prompt.lower() == "no":
+
+            st.session_state.messages.append({"role": "user", "content": prompt})
+
+            st.session_state.messages.append({"role": "assistant", "content": "What else can I help you with?"})
+
+        st.session_state.awaiting_more_info = False
+
+    else:
+
+        # Add user message to the buffer
+
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+ 
+
+        # Limit the buffer to the specified size
+
+        if len(st.session_state.messages) > buffer_size * 2:
+
+            st.session_state.messages = st.session_state.messages[-buffer_size * 2:]
+
+ 
+
+        # Display user message
+
+        with st.chat_message("user"):
+
+            st.markdown(prompt)
+
+ 
+
+        # Generate the response from the model
+
+        client = st.session_state.client
+
+        stream = client.chat.completions.create(
+
+            model=model_to_use,
+
+            messages=st.session_state.messages,
+
+            stream=True
+
+        )
+
+ 
+
+        # Process the assistant response
+
+        response = st.write_stream(stream)
+
+ 
+
+        # Add assistant response to the buffer
+
+        st.session_state.messages.append({"role": "assistant", "content": response})
+
+ 
+
+        # Ask if the user wants more info
+
+        st.session_state.messages.append({"role": "assistant", "content": "DO YOU WANT MORE INFO?"})
+
+        with st.chat_message("assistant"):
+
+            st.markdown(f"{response} <br> DO YOU WANT MORE INFO?")
+
+ 
+
+        st.session_state.awaiting_more_info = True
