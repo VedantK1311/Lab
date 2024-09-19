@@ -5,3 +5,4 @@ chromadb
 pysqlite3-binary
 PyMuPDF==1.22.5
 pydantic-settings==2.0.3
+pydantic
